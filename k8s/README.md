@@ -30,7 +30,7 @@ README — this is the manifest-level reference. Everything deploys into the
    Selecting by label (not node name) keeps the manifests portable — nothing
    here names a specific node or IP.
 3. **Image**: the manifests default to the published
-   `ghcr.io/OWNER/chat-rk1/rocket-runtime` image. If you built your own
+   `ghcr.io/eburgueno/chat-rk1/rocket-runtime` image. If you built your own
    (`scripts/10-build-runtime.sh`), override it in an overlay (see below) —
    don't edit the base.
 4. **Storage class**: `10-model-cache-pvc.yaml` deliberately has none (cluster

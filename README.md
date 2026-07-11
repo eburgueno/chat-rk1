@@ -1,5 +1,11 @@
 # chat-rk1 — an NPU-accelerated LLM chat UI on a Turing RK1, on Talos Linux
 
+> **AI disclosure:** this repository — manifests, scripts, and documentation —
+> was largely written with AI assistance (Claude), directed and reviewed by a
+> human. Everything performance-related was measured on real hardware (the
+> numbers below are from a live cluster, not model output), but read with the
+> same healthy skepticism you'd apply to any homelab writeup.
+
 **"I have a Turing RK1 (RK3588) running Talos — can I run an LLM on it, with
 the NPU actually doing something useful?"**
 
@@ -53,7 +59,7 @@ browser ──HTTPS──> ingress ──> Open WebUI ──OpenAI API──> ll
 
 | Component | Image | Role |
 |---|---|---|
-| llama-server | `ghcr.io/OWNER/chat-rk1/rocket-runtime` | OpenAI-compatible inference server; llama.cpp + the `ggml-rocket` NPU backend |
+| llama-server | `ghcr.io/eburgueno/chat-rk1/rocket-runtime` | OpenAI-compatible inference server; llama.cpp + the `ggml-rocket` NPU backend |
 | Open WebUI | `ghcr.io/open-webui/open-webui` (pinned) | chat interface, history, RAG |
 
 **The entire CPU-vs-NPU story is one environment variable.** The runtime
@@ -97,7 +103,7 @@ kubectl label node <your-npu-node> npu.rocket-stack/enabled=true
 
 ## Step 3 — the runtime image
 
-Default: use the prebuilt `ghcr.io/OWNER/chat-rk1/rocket-runtime` — nothing
+Default: use the prebuilt `ghcr.io/eburgueno/chat-rk1/rocket-runtime` — nothing
 to do.
 
 Build your own (recommended for pin-bumps; required if you don't trust random

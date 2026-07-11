@@ -41,9 +41,9 @@ spec:
         npu.rocket-stack/enabled: "true"
       initContainers:
         - name: fetch-model
-          # REPLACE OWNER (or use the kustomize overlay to point at your own
-          # registry). Same image as the server — it already carries curl.
-          image: ghcr.io/OWNER/chat-rk1/rocket-runtime:v0.1.0
+          # The published image (use a kustomize overlay to point at your own
+          # registry build). Same image as the server — it already carries curl.
+          image: ghcr.io/eburgueno/chat-rk1/rocket-runtime:v0.1.0
           command: ["bash", "-c"]
           args:
             - |
@@ -61,7 +61,7 @@ spec:
               mountPath: /models
       containers:
         - name: llama-server
-          image: ghcr.io/OWNER/chat-rk1/rocket-runtime:v0.1.0
+          image: ghcr.io/eburgueno/chat-rk1/rocket-runtime:v0.1.0
           # Everything else (host/port/ctx/batch/backend) comes from the
           # ConfigMap as LLAMA_ARG_* / GGML_BACKEND_PATH env.
           command: ["bash", "-c", "exec llama-server -m /models/${MODEL_FILE}"]

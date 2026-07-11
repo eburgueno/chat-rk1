@@ -105,7 +105,7 @@ RUN mkdir -p /opt/llama \
 # Stage 2: runtime
 # ==============================================================================
 FROM ${BASE} AS runtime
-LABEL org.opencontainers.image.source="https://github.com/OWNER/chat-rk1" \
+LABEL org.opencontainers.image.source="https://github.com/eburgueno/chat-rk1" \
       org.opencontainers.image.description="llama.cpp + ggml-rocket NPU backend for the RK3588 (Turing RK1) — llama-server/llama-bench/llama-cli" \
       org.opencontainers.image.licenses="GPL-3.0-or-later"
 ENV DEBIAN_FRONTEND=noninteractive

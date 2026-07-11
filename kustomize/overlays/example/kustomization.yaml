@@ -11,7 +11,7 @@ resources:
 # (scripts/10-build-runtime.sh). Otherwise delete this block to use the
 # published ghcr.io image from the base.
 images:
-  - name: ghcr.io/OWNER/chat-rk1/rocket-runtime
+  - name: ghcr.io/eburgueno/chat-rk1/rocket-runtime
     newName: registry.lan:5000/rocket-runtime
     newTag: latest
 

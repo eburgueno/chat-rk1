@@ -18,15 +18,11 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(dirname "$here")"
 [ -f "$here/config.env" ] && source "$here/config.env"
 : "${BUILDER:=talos-builder}"; : "${PLATFORM:=linux/arm64}"
-: "${GHCR_OWNER:=OWNER}"
+: "${GHCR_OWNER:=eburgueno}"
 : "${GHCR_IMAGE:=ghcr.io/${GHCR_OWNER}/chat-rk1/rocket-runtime}"
 : "${RUNTIME_VERSION:=v0.1.0}"
 : "${LLAMACPP_REF:=}"
 
-if [ "$GHCR_OWNER" = "OWNER" ]; then
-  echo "ERROR: set GHCR_OWNER in scripts/config.env first (your github user/org)." >&2
-  exit 2
-fi
 if ! grep -q '"ghcr.io"' "${DOCKER_CONFIG:-$HOME/.docker}/config.json" 2>/dev/null; then
   echo "ERROR: not logged in to ghcr.io — run: docker login ghcr.io -u $GHCR_OWNER" >&2
   exit 2

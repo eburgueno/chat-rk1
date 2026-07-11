@@ -38,8 +38,8 @@ spec:
         npu.rocket-stack/enabled: "true"
       containers:
         - name: bench
-          # REPLACE OWNER (or point at your own registry build)
-          image: ghcr.io/OWNER/chat-rk1/rocket-runtime:v0.1.0
+          # The published image (or point at your own registry build)
+          image: ghcr.io/eburgueno/chat-rk1/rocket-runtime:v0.1.0
           command: ["/bin/bash", "/opt/bench/bench.sh"]  # baked into the image
           envFrom:
             - configMapRef:
