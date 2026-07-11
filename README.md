@@ -221,6 +221,14 @@ Notes:
 - Raising `LLAMA_ARG_CTX_SIZE` costs RAM (~36 KiB/token at f16 for the 3B) —
   budget against the container's memory limit (see OOM math below).
 
+## More than one RK1?
+
+Multiple NPU nodes can each serve their own conversation at full speed —
+the pattern is one llama-server per node with conversations pinned via
+distinct model aliases (not distributed inference, which doesn't pay over
+Ethernet). Design options, trade-offs, and a recipe:
+[`docs/multi-node.md`](docs/multi-node.md).
+
 ## Performance expectations
 
 Full measured tables (clock sweep, size sweep, MoE boundary, 200-vs-600 MHz):
@@ -257,7 +265,7 @@ Full measured tables (clock sweep, size sweep, MoE boundary, 200-vs-600 MHz):
 | `scripts/` | build infra, ghcr publish, TTFT checker (all read `scripts/config.env`) |
 | `bench/` + `k8s/80,90` | the CPU-vs-NPU benchmark harness (llama-bench Job) |
 | `results/` | the measured numbers this README quotes |
-| `docs/` | Talos image guide, rescue runbook, provenance/pins, licensing |
+| `docs/` | Talos image guide, multi-node scaling, rescue runbook, provenance/pins, licensing |
 | `tools/` | imager/binfmt compose files + the TFTP/HTTP rescue-kit servers |
 
 ## Provenance & licensing
