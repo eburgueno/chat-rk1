@@ -1,0 +1,57 @@
+# All llama-server tunables in one place. The Deployment consumes this via
+# envFrom — llama-server natively reads LLAMA_ARG_* environment variables, so
+# swapping models or resizing the context is a ConfigMap edit + rollout, never
+# a Deployment edit:
+#
+#   kubectl -n chat-rk1 edit configmap llama-server-config
+#   kubectl -n chat-rk1 rollout restart deploy/llama-server
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llama-server-config
+  namespace: chat-rk1
+  labels:
+    app.kubernetes.io/part-of: chat-rk1
+data:
+  # ---- Model (swap all three lines together — see the model table in the
+  # top-level README). Default: ungated 3B instruct at F16 (~6.2 GB). F16
+  # weights are what the NPU's prefill offload accelerates best; avoid gated
+  # repos (no HF token in-cluster) and MoE models (no NPU win).
+  MODEL_URL: "https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-f16.gguf"
+  MODEL_FILE: "Qwen2.5-3B-Instruct-f16.gguf"
+  LLAMA_ARG_ALIAS: "qwen2.5-3b-instruct"
+
+  # ---- Server knobs
+  # Context size. KV cache is ~36 KiB/token for this model at f16 → ~1.2 GiB
+  # at 32k. Budget it against the container memory limit before raising.
+  LLAMA_ARG_CTX_SIZE: "32768"
+  # Concurrent request slots. The context is SPLIT across slots, and each slot
+  # multiplies KV memory — keep 1 on a single-user 16–32 GB board.
+  LLAMA_ARG_N_PARALLEL: "1"
+  # Logical/physical batch. ubatch=512 is the GEMM size the NPU actually sees
+  # per step — the measured sweet spot from the vendored benchmarks.
+  LLAMA_ARG_BATCH: "2048"
+  LLAMA_ARG_UBATCH: "512"
+  # Rocket offload is scheduler-driven (BLAS-style), not layer-offload: keep 0.
+  LLAMA_ARG_N_GPU_LAYERS: "0"
+  LLAMA_ARG_HOST: "0.0.0.0"
+  LLAMA_ARG_PORT: "8080"
+  # Flash attention hurts the NPU prefill path (server default is "auto"):
+  # measured on-node, FA off cuts a ~1940-token TTFT from 71.7s to 60.0s with
+  # the rocket backend, while CPU prefill is unaffected. Keep off.
+  LLAMA_ARG_FLASH_ATTN: "off"
+  # Thread count is auto-detected (all 8 cores on an RK1). Uncomment to pin to
+  # the 4 big A76 cores only:
+  # LLAMA_ARG_THREADS: "4"
+
+  # ---- The NPU switch. This one variable is the whole CPU-vs-NPU story:
+  # set → ggml dlopens the rocket backend and offloads prefill GEMMs to the
+  # NPU; empty → pure CPU baseline, same image. Handy for an A/B (an explicit
+  # empty override beats this envFrom value):
+  #   CPU:     kubectl -n chat-rk1 set env deploy/llama-server GGML_BACKEND_PATH=""
+  #   restore: kubectl -n chat-rk1 set env deploy/llama-server GGML_BACKEND_PATH-
+  GGML_BACKEND_PATH: "/opt/rocket/libggml-rocket.so"
+  # To PROVE offload is happening, exec into the pod and run llama-bench —
+  # the backend column reads ROCKET and pp512 jumps ~2.4x vs `env -u
+  # GGML_BACKEND_PATH ...` (llama-server itself loads the backend the same
+  # way but filters the load_backend log line). See README "prove it".

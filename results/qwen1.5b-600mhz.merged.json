@@ -1,0 +1,22 @@
+{
+  "model": "qwen2.5-1.5b-instruct-fp16.gguf",
+  "npu_clock": "600MHz",
+  "label": "qwen1-5b-600",
+  "backends": {
+    "cpu": {
+      "pp512": 42.35,
+      "pp2048": 38.73,
+      "tg128": 6.21
+    },
+    "npu": {
+      "pp512": 91.94,
+      "pp2048": 59.82,
+      "tg128": 6.2
+    }
+  },
+  "speedup_npu_over_cpu": {
+    "pp2048": 1.54,
+    "pp512": 2.17,
+    "tg128": 1.0
+  }
+}

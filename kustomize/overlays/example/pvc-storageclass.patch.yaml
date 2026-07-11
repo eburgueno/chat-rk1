@@ -1,0 +1,10 @@
+# Put the model weights on the NPU node's local disk. Use whatever
+# WaitForFirstConsumer local-storage class your cluster provides
+# (csi-driver-lvm *-linear, local-path, openebs-hostpath, ...).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-cache
+  namespace: chat-rk1
+spec:
+  storageClassName: local-path

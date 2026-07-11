@@ -1,0 +1,12 @@
+{
+  "model": "Qwen2.5-3B-Instruct-f16.gguf",
+  "npu_clock": "600MHz",
+  "label": "rk1-600-fast",
+  "backends": {
+    "npu": {
+      "pp512": 50.83,
+      "tg32": 3.24
+    }
+  },
+  "speedup_npu_over_cpu": {}
+}

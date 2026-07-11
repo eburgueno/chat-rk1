@@ -1,0 +1,26 @@
+# Talos machineconfig patch: let containerd (k8s pod pulls) use the local
+# plain-HTTP OCI registry that holds the rocket-runtime image.
+#
+# WHY: the node's machineconfig ships `registries.mirrors: {}` — nothing trusts
+# the local registry for pod image pulls. (The prior effort's registry trust was
+# for the Talos *installer* pulling extensions with --insecure, which is a
+# separate path from containerd.) Without this, the bench Job's image pull fails.
+#
+# HARDWARE GATE: this is a machineconfig change — apply only with go-ahead. It is
+# benign and reversible (`talosctl patch mc` with the key removed), touches no
+# hardware, and needs no reboot.
+#
+# Replace <REGISTRY_HOST:PORT> with your registry (e.g. the LAN host:port that
+# scripts/10-build-runtime.sh pushed to). Apply with:
+#   talosctl -n <node> patch machineconfig --patch @talos/registry-insecure.patch.yaml
+# For a PLAIN-HTTP registry, the `http://` mirror endpoint is all that's needed.
+# Do NOT add a `registries.config.<host>.tls` block — `insecureSkipVerify` implies
+# TLS, and Talos's machine image-pull (used by `upgrade`) then rejects the pull
+# with "TLS config specified for non-HTTPS registry". (The CRI pod-pull path
+# tolerates it, which is why a pod pull can succeed while `upgrade` fails.)
+machine:
+  registries:
+    mirrors:
+      "<REGISTRY_HOST:PORT>":
+        endpoints:
+          - "http://<REGISTRY_HOST:PORT>"

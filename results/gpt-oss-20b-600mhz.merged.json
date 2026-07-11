@@ -1,0 +1,22 @@
+{
+  "model": "gpt-oss-20b-mxfp4.gguf",
+  "npu_clock": "600MHz",
+  "label": "gptoss20b-600",
+  "backends": {
+    "cpu": {
+      "pp512": 17.66,
+      "pp2048": 16.69,
+      "tg128": 5.25
+    },
+    "npu": {
+      "pp512": 17.59,
+      "pp2048": 15.48,
+      "tg128": 5.25
+    }
+  },
+  "speedup_npu_over_cpu": {
+    "pp2048": 0.93,
+    "pp512": 1.0,
+    "tg128": 1.0
+  }
+}

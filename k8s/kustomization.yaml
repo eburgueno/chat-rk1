@@ -1,0 +1,15 @@
+# Makes k8s/ usable as a kustomize base:  kubectl apply -k k8s/
+# is equivalent to applying 00–50 by hand. The optional benchmark pieces
+# (80/90) are deliberately excluded — apply those with -f when you want them.
+#
+# Site-specific overrides (storage class, ingress host, model, image) belong
+# in an overlay: see kustomize/overlays/example/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - 00-namespace.yaml
+  - 10-model-cache-pvc.yaml
+  - 20-llama-server-config.yaml
+  - 30-llama-server.yaml
+  - 40-open-webui.yaml
+  - 50-ingress.yaml

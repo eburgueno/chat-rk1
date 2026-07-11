@@ -1,0 +1,20 @@
+# build/work outputs (heavy, machine-local)
+tools/fileserver/data/*
+!tools/fileserver/data/README.md
+tools/imager/out/
+**/*.dtb
+**/*.dtbo
+
+# machine-local build config (copy of scripts/config.env.example)
+scripts/config.env
+
+# machine-local deploy overlay (copy kustomize/overlays/example/ instead)
+kustomize/overlays/local-registry/
+
+# bench.sh staged into the runtime build context by 10-build-runtime.sh
+docker/runtime/bench.sh
+
+# OS / editor cruft
+.DS_Store
+*.swp
+*~

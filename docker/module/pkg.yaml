@@ -1,0 +1,86 @@
+# bldr recipe for a PATCHED rocket.ko (Phase B / clock lever). Drop into a
+# siderolabs/pkgs fork at tag v1.13.0-28-g54ec9fc as pkgs/rocket-patched/pkg.yaml
+# and add `TARGETS += rocket-patched-pkg` to pkgs/Makefile. Adapted from the
+# proven pkgs recipe used for an earlier out-of-tree BSP module.
+#
+# Unlike an external module, rocket is IN-TREE: the kernel-build stage already
+# leaves its sources at /src/drivers/accel/rocket. We patch them in place with
+# the clock (081) + IOMMU-keepattach (083) + BO-UAF (084) patches and rebuild
+# only that module via M=, so vermagic + MODVERSIONS CRCs match the kernel-build
+# tree by construction.
+#
+# Provide in vars.yaml / Pkgfile:
+#   rocket_patches_ref     git ref of gregordinary/patches (pin a commit)
+#   rocket_patches_sha256  sha256 of the tarball at that ref
+#   rocket_patches_sha512  sha512 of the tarball at that ref
+# (bldr refuses unchecksummed fetches; compute with `sha256sum`/`sha512sum` on
+# the downloaded tarball.)
+name: rocket-patched-pkg
+variant: scratch
+shell: /bin/bash
+# {{ if eq .ARCH "aarch64" }}
+dependencies:
+  - stage: base
+  - stage: kernel-build
+  - image: "{{ .LLVM_IMAGE }}:{{ .TOOLS_REV }}"
+steps:
+  - sources:
+      - url: https://github.com/gregordinary/patches/archive/{{ .rocket_patches_ref }}.tar.gz
+        destination: rocket-patches.tar.gz
+        sha256: "{{ .rocket_patches_sha256 }}"
+        sha512: "{{ .rocket_patches_sha512 }}"
+    env:
+      ARCH: arm64
+      LLVM: 1
+    prepare:
+      - |
+        mkdir -p /tmp/patches && tar xf rocket-patches.tar.gz -C /tmp/patches --strip-components=1
+      # 081 (clock, must precede 083) and 083 (IOMMU keep-attach) apply from
+      # upstream as-is. 084 (BO-UAF-on-close fix) needs a 6.18.34 rebase — the
+      # create_bo insert block lacks v7.1's sgt/if-ret structure — so we apply the
+      # rebased copy vendored in patches/ (this repo). 084 is independent of the
+      # clock lever but hardens the multicore-fanout/worker-fd path our prefill
+      # uses; see patches/084-*.6.18.34.patch header.
+      - |
+        cd /src
+        patch -p1 < /tmp/patches/rocket/081-rocket-drv-npu-clk.patch
+        patch -p1 < /tmp/patches/rocket/083-rocket-drv-iommu-keepattach.patch
+        patch -p1 < /pkg/patches/084-rocket-drv-fix-bo-mm-uaf.6.18.34.patch
+      - |
+        mkdir -p /rootfs/usr/lib/modules/$(cat /src/include/config/kernel.release)/
+  - network: none
+    env:
+      ARCH: arm64
+      LLVM: 1
+    build:
+      - |
+        make ARCH=${ARCH} LLVM=${LLVM} -C /src M=/src/drivers/accel/rocket modules -j$(nproc)
+      # Fail loudly if vermagic drifted from the target kernel release.
+      - |
+        modinfo /src/drivers/accel/rocket/rocket.ko | grep -q "vermagic:.*$(cat /src/include/config/kernel.release)" \
+          || { echo "vermagic mismatch"; exit 1; }
+    install:
+      - |
+        make -C /src M=/src/drivers/accel/rocket modules_install \
+          INSTALL_MOD_PATH=/rootfs/usr \
+          INSTALL_MOD_DIR=extra/rocket \
+          INSTALL_MOD_STRIP=1
+    test:
+      - |
+        find /rootfs/usr/lib/modules -name '*.ko' -exec grep -FL '~Module signature appended~' {} \+
+      - |
+        fhs-validator /rootfs
+finalize:
+  - from: /rootfs
+    to: /
+# {{ else }}
+dependencies:
+  - stage: base
+steps:
+  - prepare:
+      - |
+        mkdir /rootfs
+finalize:
+  - from: /rootfs
+    to: /
+# {{ end }}

@@ -1,0 +1,47 @@
+# NOTE: this file is a LEGACY BSP-path example (it bundles the old rockchip-rknpu
+# extension + sbc-rockchip -rknpu1 overlay). The current rocket-path imager
+# invocation is documented in docker/module/README.md.
+#
+# One-shot: build a Talos installer image for the RK1 nodes that bundles the
+# locally-built rockchip-rknpu extension (pulled from the local registry with
+# --insecure) and the turingrk1 overlay (u-boot + DTB handling).
+#
+# Run: docker compose -f tools/imager/compose.yml run --rm imager
+# Output: tools/imager/out/installer-arm64.tar  → load & push with:
+#   podman load -i tools/imager/out/installer-arm64.tar
+#   podman tag <ref> localhost:5000/siderolabs/installer:v1.13.4-rknpu-rN
+#   podman push --tls-verify=false --digestfile /tmp/digest localhost:5000/siderolabs/installer:v1.13.4-rknpu-rN
+# (podman because docker push to the plain-HTTP registry needs an
+# insecure-registries daemon.json entry, which requires root.)
+#
+# IMPORTANT: nodes cache installer images by tag — re-pushing the same tag and
+# upgrading again silently reuses the old cached image. Bump the tag every
+# rebuild (-r2, -r3, ...). For `talosctl upgrade` use EITHER the bare tag OR
+# repo@digest (no tag): the combined tag@digest form fails with "not found in
+# containerd store" (reference-format mismatch in the image lookup).
+#
+# Update --system-extension-image to the digest printed by ./build.sh ext.
+services:
+  imager:
+    image: ghcr.io/siderolabs/imager:v1.13.4
+    network_mode: host
+    volumes:
+      - ./out:/out
+    command:
+      - installer
+      - --arch=arm64
+      - --insecure
+      - --base-installer-image=ghcr.io/siderolabs/installer-base:v1.13.4
+      # Talos signs in-tree modules with a throwaway key at kernel build and
+      # boots with module.sig_enforce=1, so out-of-tree extension modules can
+      # never satisfy signature verification. sig_enforce is a bool_enable_only
+      # kernel param — a later =0 CANNOT override an earlier =1 — so the
+      # default arg must be DELETED with the "-param" syntax (v1.12+ imager).
+      # NOTE: this only affects the UKI, i.e. fresh sd-boot installs. Nodes
+      # with a legacy GRUB install preserve their kernel args across upgrades
+      # forever; those need the grub.cfg edited in place (see
+      # docker/module/README.md — the legacy-GRUB sig_enforce edit).
+      - --extra-kernel-arg=-module.sig_enforce
+      - --overlay-name=turingrk1
+      - --overlay-image=localhost:5000/siderolabs/sbc-rockchip:v0.2.0-rknpu1
+      - --system-extension-image=localhost:5000/siderolabs/rockchip-rknpu:v1.13.4@sha256:91ac9cd5ff29e881cfe27c131466feec144f01200649636ed5853870ff1f7f90

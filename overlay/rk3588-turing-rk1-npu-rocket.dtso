@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Device-tree overlay: enable the RK3588 NPU for the mainline `rocket`
+ * DRM-accel driver on Turing RK1.
+ *
+ * WHY THIS IS NEEDED (kernel 6.18.34):
+ *   - rk3588-base.dtsi defines rknn_core_0/1/2 (compatible
+ *     "rockchip,rk3588-rknn-core") and rknn_mmu_0/1/2, fully wired
+ *     (clocks incl. the "npu" SCMI clock, power-domains, iommus, resets)
+ *     but ALL status = "disabled".
+ *   - rk3588-turing-rk1.dtsi defines the NPU rail regulator vdd_npu_s0
+ *     (RK8602 @ i2c 0x42) but never references it as npu-supply on any core.
+ *
+ * WHAT THIS OVERLAY DOES (and deliberately does NOT):
+ *   - Sets status="okay" on the 3 cores + 3 IOMMUs → the rocket driver binds
+ *     three independent per-core accel devices (/dev/accel/accel0). Multicore
+ *     is reached from userspace by opening N file descriptors (one scheduling
+ *     entity per fd), NOT by fusing the cores into one node. This is the exact
+ *     opposite of the BSP-rknpu single-node DTB repack — that path is not used
+ *     here.
+ *   - Adds npu-supply = <&vdd_npu_s0> so the optional 082 voltage-coupling
+ *     patch can hold/scale the rail. No-op at <=600 MHz (rail already 0.80 V);
+ *     required only for a future >600 MHz bring-up. Harmless if the volt patch
+ *     is absent.
+ *   - Leaves the NPU compute clock at the DT default (assigned-clock-rates =
+ *     200 MHz, the safe GPLL-divider path). Raising it is a RUNTIME lever via
+ *     the 081 patch's `rocket_npu_clk_hz` module param, applied from
+ *     runtime-resume with the power domain already powered — never cold.
+ *   - Leaves the IOMMUs ENABLED (rocket uses per-fd 4 GB IOVA windows over the
+ *     40-bit NPU AXI; do NOT add bypass_iommu here — that was a BSP-driver-only
+ *     workaround).
+ */
+
+/dts-v1/;
+/plugin/;
+
+&rknn_core_0 {
+	status = "okay";
+	npu-supply = <&vdd_npu_s0>;
+};
+
+&rknn_mmu_0 {
+	status = "okay";
+};
+
+&rknn_core_1 {
+	status = "okay";
+	npu-supply = <&vdd_npu_s0>;
+};
+
+&rknn_mmu_1 {
+	status = "okay";
+};
+
+&rknn_core_2 {
+	status = "okay";
+	npu-supply = <&vdd_npu_s0>;
+};
+
+&rknn_mmu_2 {
+	status = "okay";
+};

@@ -1,0 +1,24 @@
+# Example site overlay — copy this directory, put YOUR values in the patches,
+# and deploy with:  kubectl apply -k kustomize/overlays/<yours>/
+#
+# The base stays pristine; everything cluster-specific lives here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../k8s
+
+# Point at your own registry/tag if you built the runtime image yourself
+# (scripts/10-build-runtime.sh). Otherwise delete this block to use the
+# published ghcr.io image from the base.
+images:
+  - name: ghcr.io/OWNER/chat-rk1/rocket-runtime
+    newName: registry.lan:5000/rocket-runtime
+    newTag: latest
+
+patches:
+  # Local, WaitForFirstConsumer storage class for the model weights.
+  - path: pvc-storageclass.patch.yaml
+  # Your chat hostname (+ TLS arrangement).
+  - path: ingress-host.patch.yaml
+  # Optional: different model / context size. Delete if the default is fine.
+  - path: model.patch.yaml

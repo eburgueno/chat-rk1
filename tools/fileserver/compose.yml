@@ -1,0 +1,18 @@
+# Static fileserver for build sources that upstream CDNs can't serve.
+# Currently: linux-6.18.34.tar.xz (kernel.org archive was restructured on
+# 2026-07-03 and all v6.x/v7.x tarballs 404 on the CDN and every mirror;
+# this copy came from the gregkh/linux GitHub stable mirror, tag v6.18.34,
+# recompressed to xz).
+#
+# Run: podman-compose -f tools/fileserver/compose.yml up -d
+# Host networking (rootless podman tun/veth is broken until next reboot);
+# serves ./data on http://localhost:8018/
+services:
+  fileserver:
+    image: docker.io/library/busybox:stable
+    container_name: talos-fileserver
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./data:/data:ro
+    command: busybox httpd -f -p 8018 -h /data

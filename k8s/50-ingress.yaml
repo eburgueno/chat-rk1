@@ -1,0 +1,41 @@
+# Ingress for the chat UI. EDIT THE HOST (or patch it in an overlay —
+# kustomize/overlays/example shows how).
+#
+# TLS options, pick one:
+#  1. Ingress controller default certificate (e.g. nginx
+#     --default-ssl-certificate with a wildcard cert): keep the tls block
+#     WITHOUT secretName — the controller falls back to its default cert.
+#  2. cert-manager per-host certificate: uncomment the cluster-issuer
+#     annotation and set secretName; cert-manager creates the secret.
+#  3. Bring your own secret: create a TLS secret in this namespace and set
+#     secretName to it.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: open-webui
+  namespace: chat-rk1
+  labels:
+    app.kubernetes.io/part-of: chat-rk1
+  annotations:
+    # Model replies stream for a while; uploads (RAG docs) can be big.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: chat.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: open-webui
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - chat.example.com
+      # secretName: chat.example.com-tls   # options 2/3; omit for option 1

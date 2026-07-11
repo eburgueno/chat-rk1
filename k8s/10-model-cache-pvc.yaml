@@ -1,0 +1,24 @@
+# Model-cache volume — holds the (multi-GB) GGUF weights llama-server mmaps.
+#
+# STORAGE CLASS MATTERS HERE. The base intentionally omits storageClassName so
+# it binds to your cluster default and works everywhere — but for good load
+# times and page-cache behaviour you want the weights on the NPU node's LOCAL
+# disk, via a WaitForFirstConsumer storage class (the volume then provisions on
+# whichever node the pod lands on, i.e. the NPU node). Common options:
+# csi-driver-lvm `*-linear`, `local-path`, `openebs-hostpath`. Network storage
+# (NFS) works but model load and cold page-refaults will be slow.
+#
+# Override without editing this file: kustomize/overlays/example shows the
+# one-line patch.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-cache
+  namespace: chat-rk1
+  labels:
+    app.kubernetes.io/part-of: chat-rk1
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 20Gi

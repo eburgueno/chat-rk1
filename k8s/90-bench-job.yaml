@@ -1,0 +1,76 @@
+# CPU-vs-NPU benchmark Job. Runs bench/bench.sh from the rocket-runtime image on
+# the NPU node, writing results into the model-cache PVC (under /models/results).
+#
+# NODE SELECTION: this pins to a node you label as the NPU node:
+#   kubectl label node <your-npu-node> npu.rocket-stack/enabled=true
+# We select by label (not node name) so the manifest carries nothing
+# site-specific. The node must (a) have the rocket driver loaded and
+# /dev/accel/accel0 present, and (b) provide the local-SSD storage class used by
+# the PVC.
+#
+# DEVICE ACCESS: the NPU is exposed by bind-mounting the host's /dev/accel. This
+# is the minimal, dependency-free path for a single dedicated node. For a shared
+# cluster, front it with a device plugin instead (see k8s/README.md) and drop
+# the hostPath + privileged bits.
+#
+# IMAGE: set to your registry's rocket-runtime tag (built by
+# scripts/10-build-runtime.sh). Left as a placeholder so nothing site-specific
+# is committed.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rocket-bench
+  namespace: chat-rk1
+  labels:
+    app.kubernetes.io/part-of: chat-rk1
+    app.kubernetes.io/component: benchmark
+spec:
+  backoffLimit: 0
+  completions: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: chat-rk1
+        app.kubernetes.io/component: benchmark
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        npu.rocket-stack/enabled: "true"
+      containers:
+        - name: bench
+          # REPLACE OWNER (or point at your own registry build)
+          image: ghcr.io/OWNER/chat-rk1/rocket-runtime:v0.1.0
+          command: ["/bin/bash", "/opt/bench/bench.sh"]  # baked into the image
+          envFrom:
+            - configMapRef:
+                name: rocket-bench-config
+          env:
+            - name: LLAMA_CACHE
+              value: /models
+            - name: OUT_DIR
+              value: /models/results
+            - name: LABEL
+              value: rk1-32gb
+          securityContext:
+            # Needed to open /dev/accel/accel*. Narrow this to a device cgroup
+            # rule if your policy forbids privileged pods.
+            privileged: true
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: dev-accel
+              mountPath: /dev/accel
+          resources:
+            requests:
+              cpu: "6"
+              memory: 8Gi
+            limits:
+              memory: 24Gi
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: model-cache
+        - name: dev-accel
+          hostPath:
+            path: /dev/accel
+            type: Directory

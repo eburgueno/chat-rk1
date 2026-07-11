@@ -1,0 +1,222 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: gregordinary <33880035+gregordinary@users.noreply.github.com>
+Date: Tue, 30 Jun 2026 12:00:00 +0000
+Subject: [PATCH] rocket: anchor the IOVA allocator to the IOMMU domain (fix
+ use-after-free on close)
+
+The per-context IOVA allocator (drm_mm + mm_lock) lived in struct rocket_file_priv
+and was torn down (drm_mm_takedown) and freed (kfree) in rocket_postclose. But a
+BO's IOVA node is removed only in its gem .free path (rocket_gem_bo_free), and a
+job's BO references are dropped asynchronously by the drm_sched free worker
+(rocket_job_free -> rocket_job_cleanup), which can run AFTER the owning file is
+closed. So a just-completed job could keep a BO alive past postclose; bo_free then
+ran drm_mm_remove_node()/mutex_lock() on the already-freed rocket_file_priv -- a
+use-after-free, first visible as a "drm_mm_takedown: allocator still has nodes"
+WARNING (drivers/gpu/drm/drm_mm.c:965). Reproduced with the FFN block, whose three
+NT=3 multicore matmuls open/submit/close many short-lived worker fds.
+
+Fix: move mm/mm_lock into struct rocket_iommu_domain, which is already refcounted
+and referenced by the file, by every mapped BO, and by the attached core. The
+allocator is created in rocket_iommu_domain_create and destroyed in
+rocket_iommu_domain_destroy (last reference), so a late bo_free removes its node
+via bo->domain->mm -- a domain it still holds a reference to -- and the takedown
+runs only once the allocator is provably empty. rocket_gem_object::driver_priv is
+now unused and removed.
+
+Independent of the clk/volt/keepattach/perf patches (touches rocket_drv.{c,h} +
+rocket_gem.{c,h}); apply in any order. Upstream candidate.
+---
+Rebased to kernel 6.18.34-talos (the create_bo insert block lacks the
+v7.1 sgt/if-ret structure); mechanically identical intent.
+---
+--- a/drivers/accel/rocket/rocket_drv.c
++++ b/drivers/accel/rocket/rocket_drv.c
+@@ -30,6 +30,13 @@
+ {
+ 	struct rocket_iommu_domain *domain = container_of(kref, struct rocket_iommu_domain, kref);
+ 
++	/*
++	 * Last reference gone: every BO mapped into this domain has been freed
++	 * (each drops a domain ref in its free path after removing its IOVA node),
++	 * so the allocator is empty here and the takedown is race-free.
++	 */
++	drm_mm_takedown(&domain->mm);
++	mutex_destroy(&domain->mm_lock);
+ 	iommu_domain_free(domain->domain);
+ 	domain->domain = NULL;
+ 	kfree(domain);
+@@ -52,6 +59,16 @@
+ 	}
+ 	kref_init(&domain->kref);
+ 
++	/*
++	 * The IOVA allocator spans this domain's aperture and shares its
++	 * refcounted lifetime (see struct rocket_iommu_domain). Torn down in
++	 * rocket_iommu_domain_destroy when the last reference drops.
++	 */
++	drm_mm_init(&domain->mm, domain->domain->geometry.aperture_start,
++		    domain->domain->geometry.aperture_end -
++		    domain->domain->geometry.aperture_start + 1);
++	mutex_init(&domain->mm_lock);
++
+ 	return domain;
+ }
+ 
+@@ -73,7 +90,6 @@
+ {
+ 	struct rocket_device *rdev = to_rocket_device(dev);
+ 	struct rocket_file_priv *rocket_priv;
+-	u64 start, end;
+ 	int ret;
+ 
+ 	if (!try_module_get(THIS_MODULE))
+@@ -94,20 +110,13 @@
+ 
+ 	file->driver_priv = rocket_priv;
+ 
+-	start = rocket_priv->domain->domain->geometry.aperture_start;
+-	end = rocket_priv->domain->domain->geometry.aperture_end;
+-	drm_mm_init(&rocket_priv->mm, start, end - start + 1);
+-	mutex_init(&rocket_priv->mm_lock);
+-
+ 	ret = rocket_job_open(rocket_priv);
+ 	if (ret)
+-		goto err_mm_takedown;
++		goto err_domain_put;
+ 
+ 	return 0;
+ 
+-err_mm_takedown:
+-	mutex_destroy(&rocket_priv->mm_lock);
+-	drm_mm_takedown(&rocket_priv->mm);
++err_domain_put:
+ 	rocket_iommu_domain_put(rocket_priv->domain);
+ err_free:
+ 	kfree(rocket_priv);
+@@ -122,8 +131,11 @@
+ 	struct rocket_file_priv *rocket_priv = file->driver_priv;
+ 
+ 	rocket_job_close(rocket_priv);
+-	mutex_destroy(&rocket_priv->mm_lock);
+-	drm_mm_takedown(&rocket_priv->mm);
++	/*
++	 * The IOVA allocator is owned by the domain now, not the file: dropping
++	 * our domain reference here tears it down once the last BO (possibly freed
++	 * after us by the drm_sched free worker) has released its reference.
++	 */
+ 	rocket_iommu_domain_put(rocket_priv->domain);
+ 	kfree(rocket_priv);
+ 	module_put(THIS_MODULE);
+--- a/drivers/accel/rocket/rocket_drv.h
++++ b/drivers/accel/rocket/rocket_drv.h
+@@ -6,22 +6,35 @@
+ 
+ #include <drm/drm_mm.h>
+ #include <drm/gpu_scheduler.h>
++#include <linux/mutex.h>
+ 
+ #include "rocket_device.h"
+ 
+ extern const struct dev_pm_ops rocket_pm_ops;
+ 
++/*
++ * The per-context IOMMU domain. The IOVA allocator (mm/mm_lock) lives HERE, not
++ * in rocket_file_priv, so it shares the domain's refcounted lifetime: the domain
++ * is referenced by the file, by every BO mapped into it, and (while attached) by
++ * the core, and is destroyed only when the last of those drops. A BO's free path
++ * removes its IOVA node under this lock, and a just-completed job's BO references
++ * are dropped asynchronously by the drm_sched free worker -- which can run AFTER
++ * the file is closed. Keeping mm in the file would let that free path touch a
++ * freed rocket_file_priv (a use-after-free, seen first as a drm_mm_takedown
++ * "allocator still has nodes" warning); anchoring it to the domain the BO already
++ * holds a reference to makes the node removal always valid.
++ */
+ struct rocket_iommu_domain {
+ 	struct iommu_domain *domain;
+ 	struct kref kref;
++	struct drm_mm mm;
++	struct mutex mm_lock;
+ };
+ 
+ struct rocket_file_priv {
+ 	struct rocket_device *rdev;
+ 
+ 	struct rocket_iommu_domain *domain;
+-	struct drm_mm mm;
+-	struct mutex mm_lock;
+ 
+ 	struct drm_sched_entity sched_entity;
+ };
+--- a/drivers/accel/rocket/rocket_gem.c
++++ b/drivers/accel/rocket/rocket_gem.c
+@@ -13,7 +13,6 @@
+ static void rocket_gem_bo_free(struct drm_gem_object *obj)
+ {
+ 	struct rocket_gem_object *bo = to_rocket_bo(obj);
+-	struct rocket_file_priv *rocket_priv = bo->driver_priv;
+ 	size_t unmapped;
+ 
+ 	drm_WARN_ON(obj->dev, refcount_read(&bo->base.pages_use_count) > 1);
+@@ -21,9 +20,14 @@
+ 	unmapped = iommu_unmap(bo->domain->domain, bo->mm.start, bo->size);
+ 	drm_WARN_ON(obj->dev, unmapped != bo->size);
+ 
+-	mutex_lock(&rocket_priv->mm_lock);
++	/*
++	 * The IOVA node and its lock live in the domain (see rocket_drv.h), which
++	 * the BO holds a reference to until the put below -- so this is valid even
++	 * when the drm_sched free worker runs this after the owning file closed.
++	 */
++	mutex_lock(&bo->domain->mm_lock);
+ 	drm_mm_remove_node(&bo->mm);
+-	mutex_unlock(&rocket_priv->mm_lock);
++	mutex_unlock(&bo->domain->mm_lock);
+ 
+ 	rocket_iommu_domain_put(bo->domain);
+ 	bo->domain = NULL;
+@@ -73,7 +77,6 @@
+ 	gem_obj = &shmem_obj->base;
+ 	rkt_obj = to_rocket_bo(gem_obj);
+ 
+-	rkt_obj->driver_priv = rocket_priv;
+ 	rkt_obj->domain = rocket_iommu_domain_get(rocket_priv);
+ 	rkt_obj->size = args->size;
+ 	rkt_obj->offset = 0;
+@@ -89,11 +92,11 @@
+ 		goto err;
+ 	}
+ 
+-	mutex_lock(&rocket_priv->mm_lock);
+-	ret = drm_mm_insert_node_generic(&rocket_priv->mm, &rkt_obj->mm,
++	mutex_lock(&rocket_priv->domain->mm_lock);
++	ret = drm_mm_insert_node_generic(&rocket_priv->domain->mm, &rkt_obj->mm,
+ 					 rkt_obj->size, PAGE_SIZE,
+ 					 0, 0);
+-	mutex_unlock(&rocket_priv->mm_lock);
++	mutex_unlock(&rocket_priv->domain->mm_lock);
+ 
+ 	ret = iommu_map_sgtable(rocket_priv->domain->domain,
+ 				rkt_obj->mm.start,
+@@ -114,9 +117,9 @@
+ 	return 0;
+ 
+ err_remove_node:
+-	mutex_lock(&rocket_priv->mm_lock);
++	mutex_lock(&rocket_priv->domain->mm_lock);
+ 	drm_mm_remove_node(&rkt_obj->mm);
+-	mutex_unlock(&rocket_priv->mm_lock);
++	mutex_unlock(&rocket_priv->domain->mm_lock);
+ 
+ err:
+ 	drm_gem_shmem_object_free(gem_obj);
+--- a/drivers/accel/rocket/rocket_gem.h
++++ b/drivers/accel/rocket/rocket_gem.h
+@@ -9,8 +9,6 @@
+ struct rocket_gem_object {
+ 	struct drm_gem_shmem_object base;
+ 
+-	struct rocket_file_priv *driver_priv;
+-
+ 	struct rocket_iommu_domain *domain;
+ 	struct drm_mm_node mm;
+ 	size_t size;

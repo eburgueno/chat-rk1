@@ -1,0 +1,11 @@
+# Swap the model without touching the base. Keep MODEL_URL/MODEL_FILE/ALIAS
+# in sync; see the README model table for RAM/speedup guidance per size.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llama-server-config
+  namespace: chat-rk1
+data:
+  MODEL_URL: "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-f16.gguf"
+  MODEL_FILE: "Qwen2.5-7B-Instruct-f16.gguf"
+  LLAMA_ARG_ALIAS: "qwen2.5-7b-instruct"

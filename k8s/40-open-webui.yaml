@@ -1,0 +1,100 @@
+# Open WebUI — the browser chat interface, talking to llama-server over its
+# OpenAI-compatible API.
+#
+# The UI has no NPU needs and can run on any node (arm64/amd64 both published).
+# Pin your own node placement in an overlay if you want it colocated.
+#
+# AUTH IS OFF by default (single-user homelab behind a private ingress). Set
+# WEBUI_AUTH=true BEFORE exposing this beyond your LAN — the first signup then
+# becomes the admin account.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: open-webui-data
+  namespace: chat-rk1
+  labels:
+    app.kubernetes.io/part-of: chat-rk1
+spec:
+  # Chat history, users, settings. Small; any storage class works (RWO on the
+  # cluster default here — NFS/RWX is fine too).
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-webui
+  namespace: chat-rk1
+  labels:
+    app.kubernetes.io/part-of: chat-rk1
+    app.kubernetes.io/component: ui
+spec:
+  replicas: 1
+  # RWO data volume: replace, don't surge.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: open-webui
+  template:
+    metadata:
+      labels:
+        app: open-webui
+        app.kubernetes.io/part-of: chat-rk1
+    spec:
+      containers:
+        - name: open-webui
+          # Pinned release (multi-arch, incl. arm64). :main moves daily —
+          # bump deliberately. https://github.com/open-webui/open-webui/releases
+          image: ghcr.io/open-webui/open-webui:v0.10.2
+          env:
+            - name: OPENAI_API_BASE_URL
+              value: "http://llama-server:8080/v1"
+            # llama-server ignores the key, but Open WebUI insists on one.
+            - name: OPENAI_API_KEY
+              value: "sk-none"
+            - name: ENABLE_OPENAI_API
+              value: "true"
+            # We have no Ollama; stop the UI probing for one.
+            - name: ENABLE_OLLAMA_API
+              value: "false"
+            - name: WEBUI_AUTH
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: data
+              mountPath: /app/backend/data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: open-webui-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-webui
+  namespace: chat-rk1
+  labels:
+    app.kubernetes.io/part-of: chat-rk1
+spec:
+  selector:
+    app: open-webui
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

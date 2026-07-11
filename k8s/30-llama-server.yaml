@@ -1,0 +1,136 @@
+# llama-server — the OpenAI-compatible inference server, NPU-accelerated.
+#
+# NODE SELECTION: pins to the node you labelled as the NPU node:
+#   kubectl label node <your-npu-node> npu.rocket-stack/enabled=true
+# Selecting by label (not node name) keeps the manifest free of anything
+# site-specific. The node must have the rocket driver loaded and
+# /dev/accel/accel0 present (see README "Step 2: node prep").
+#
+# DEVICE ACCESS: the NPU is reached by bind-mounting the host's /dev/accel into
+# a privileged container — the minimal, dependency-free path for a dedicated
+# node. On a shared cluster, front it with a DRM-accel device plugin instead
+# and drop the hostPath + privileged bits (see k8s/README.md).
+#
+# MODEL DOWNLOAD: the fetch-model initContainer curls MODEL_URL into the
+# model-cache PVC once (resumable with -C -, skipped when the file exists).
+# While it runs the pod shows Init:0/1 — watch with:
+#   kubectl -n chat-rk1 logs -f deploy/llama-server -c fetch-model
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-server
+  namespace: chat-rk1
+  labels:
+    app.kubernetes.io/part-of: chat-rk1
+    app.kubernetes.io/component: inference
+spec:
+  replicas: 1
+  # RWO model volume + a single NPU: never run two instances side by side.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llama-server
+  template:
+    metadata:
+      labels:
+        app: llama-server
+        app.kubernetes.io/part-of: chat-rk1
+    spec:
+      nodeSelector:
+        npu.rocket-stack/enabled: "true"
+      initContainers:
+        - name: fetch-model
+          # REPLACE OWNER (or use the kustomize overlay to point at your own
+          # registry). Same image as the server — it already carries curl.
+          image: ghcr.io/OWNER/chat-rk1/rocket-runtime:v0.1.0
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              f="/models/${MODEL_FILE}"
+              if [ -s "$f" ]; then echo "model present: $f"; exit 0; fi
+              echo "downloading ${MODEL_URL} -> $f"
+              curl -fL --retry 5 --retry-all-errors -C - -o "$f.part" "${MODEL_URL}"
+              mv "$f.part" "$f"
+          envFrom:
+            - configMapRef:
+                name: llama-server-config
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: llama-server
+          image: ghcr.io/OWNER/chat-rk1/rocket-runtime:v0.1.0
+          # Everything else (host/port/ctx/batch/backend) comes from the
+          # ConfigMap as LLAMA_ARG_* / GGML_BACKEND_PATH env.
+          command: ["bash", "-c", "exec llama-server -m /models/${MODEL_FILE}"]
+          envFrom:
+            - configMapRef:
+                name: llama-server-config
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            # Needed to open /dev/accel/accel*. Narrow to a device-cgroup rule
+            # or a device plugin if your policy forbids privileged pods.
+            privileged: true
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: dev-accel
+              mountPath: /dev/accel
+          # /health returns 503 while the model loads, 200 when serving — so
+          # the probes get clean semantics for free. Loading ~6 GB of f16
+          # weights from local SSD takes tens of seconds; allow up to 10 min
+          # (slow disks, NFS) before declaring failure.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: "4"
+              memory: 10Gi
+            limits:
+              # ~6.2 GiB mmap'd weights + ~1.2 GiB KV (32k ctx) + compute
+              # buffers. Raise together with LLAMA_ARG_CTX_SIZE / bigger
+              # models — see the README OOM math. No CPU limit: decode wants
+              # every core it can get.
+              memory: 16Gi
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: model-cache
+        - name: dev-accel
+          hostPath:
+            path: /dev/accel
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-server
+  namespace: chat-rk1
+  labels:
+    app.kubernetes.io/part-of: chat-rk1
+spec:
+  selector:
+    app: llama-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

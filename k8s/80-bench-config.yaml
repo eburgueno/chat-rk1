@@ -1,0 +1,25 @@
+# Benchmark parameters. Edit here (or override with kustomize) — the bench Job
+# reads these as env. Keeping them in a ConfigMap means a re-run is just a Job
+# re-apply, no image rebuild.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rocket-bench-config
+  namespace: chat-rk1
+  labels:
+    app.kubernetes.io/part-of: chat-rk1
+data:
+  # A GGUF to benchmark. Downloaded once into the model-cache PVC on first run.
+  # Default: an UNGATED 3B F16 model (~6.2 GB) so prefill offload is exercised on
+  # F16 MUL_MAT weights. Swap for any GGUF (see ggml-rocket's model table); avoid
+  # gated repos (e.g. Meta Llama) — the in-cluster pull has no HF token.
+  MODEL_URL: "https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-f16.gguf"
+  # Prefill prompt sizes (the NPU's job) and decode lengths (CPU-bound).
+  PP: "512,2048"
+  TG: "128"
+  BATCH: "512"
+  REPS: "5"
+  BACKENDS: "cpu npu"
+  # Free-text note recorded in the results for the NPU clock the run used.
+  # Set to "200MHz" for the stock baseline, "600MHz" after the clock A/B.
+  CLK_LABEL: "200MHz"

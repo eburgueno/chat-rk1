@@ -1,0 +1,17 @@
+# One-shot: register aarch64 QEMU binfmt handlers so buildx can run arm64 stages.
+# Registration lives in the kernel and resets on reboot — re-run after each boot.
+#
+# Needs a privileged container in the initial user namespace, so this must run
+# under (rootful) docker, not rootless podman. The docker compose plugin is not
+# installed on this host, so run the equivalent directly:
+#   docker run --rm --privileged --network=none tonistiigi/binfmt --install aarch64
+# network_mode none also sidesteps broken veth creation when the running kernel
+# is older than the installed one (Arch pending-reboot state).
+services:
+  binfmt:
+    image: tonistiigi/binfmt
+    platform: linux/amd64
+    privileged: true
+    network_mode: "none"
+    restart: "no"
+    command: --install aarch64

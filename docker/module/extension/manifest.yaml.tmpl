@@ -1,0 +1,17 @@
+version: v1alpha1
+metadata:
+  name: rocket-patched
+  version: "{{ .VERSION }}"
+  author: rocket-stack
+  description: |
+    [{{ .TIER }}] Patched mainline `rocket` DRM-accel kernel module for the
+    RK3588 NPU (Turing Pi 2 RK1). Adds the 081 clock lever (rocket_npu_clk_hz
+    module param, set from runtime-resume) so the NPU compute clock can be raised
+    from the 200 MHz DT default to 600 MHz, plus the 083 IOMMU keep-attached
+    dispatch-latency patch. Installs to extra/ so it overrides the stock in-tree
+    rocket.ko. Replace the rockchip-rknn extension with this one in your
+    schematic; load with machineconfig kernel.modules and
+    rocket_npu_clk_hz=<hz>. Requires module.sig_enforce removed at install.
+  compatibility:
+    talos:
+      version: ">= v1.13.0"

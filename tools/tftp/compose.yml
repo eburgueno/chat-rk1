@@ -1,0 +1,14 @@
+# TFTP server for u-boot rescue: serves the fileserver data dir (recovery
+# DTBs) so a node stuck at the u-boot prompt can `tftpboot` a known-good
+# device tree and `fatwrite` it over the shared one on the ESP.
+# Runs under rootful docker (rootless can't bind udp/69) with host network.
+#   docker compose -f tools/tftp/compose.yml up -d
+services:
+  tftp:
+    image: docker.io/library/alpine:3.20
+    container_name: talos-tftp
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ../fileserver/data:/data:ro
+    command: sh -c "apk add -q tftp-hpa && exec in.tftpd -L -vv -s /data"
