@@ -31,16 +31,18 @@ fi
 tags=(-t "$GHCR_IMAGE:$RUNTIME_VERSION")
 [ -n "$LLAMACPP_REF" ] && tags+=(-t "$GHCR_IMAGE:llamacpp-${LLAMACPP_REF:0:7}")
 
+# Only pass refs that are actually set — an EMPTY --build-arg overrides the
+# Dockerfile's pinned ARG default and breaks `git checkout ""`.
+for v in ROCKET_USERSPACE_REF GGML_ROCKET_REF PATCHES_REF LLAMACPP_REF; do
+  [ -n "${!v:-}" ] && tags+=(--build-arg "$v=${!v}")
+done
+
 # Same build invocation as 10-build-runtime.sh — with a warm buildx cache this
 # is a retag-speed no-op, not a rebuild.
 cp "$root/bench/bench.sh" "$root/docker/runtime/bench.sh"
 set -x
 docker buildx build --builder "$BUILDER" --platform "$PLATFORM" \
   "${tags[@]}" \
-  --build-arg "ROCKET_USERSPACE_REF=${ROCKET_USERSPACE_REF:-}" \
-  --build-arg "GGML_ROCKET_REF=${GGML_ROCKET_REF:-}" \
-  --build-arg "PATCHES_REF=${PATCHES_REF:-}" \
-  --build-arg "LLAMACPP_REF=${LLAMACPP_REF:-}" \
   --push \
   "$root/docker/runtime"
 set +x

@@ -16,12 +16,14 @@ extra=(--push)
 # Stage the benchmark harness into the build context so the image bakes it in.
 cp "$root/bench/bench.sh" "$root/docker/runtime/bench.sh"
 
+# Only pass refs that are actually set — an EMPTY --build-arg overrides the
+# Dockerfile's pinned ARG default and breaks `git checkout ""`.
+for v in ROCKET_USERSPACE_REF GGML_ROCKET_REF PATCHES_REF LLAMACPP_REF; do
+  [ -n "${!v:-}" ] && extra+=(--build-arg "$v=${!v}")
+done
+
 set -x
 docker buildx build --builder "$BUILDER" --platform "$PLATFORM" \
   -t "$RUNTIME_IMAGE" \
-  --build-arg "ROCKET_USERSPACE_REF=${ROCKET_USERSPACE_REF:-}" \
-  --build-arg "GGML_ROCKET_REF=${GGML_ROCKET_REF:-}" \
-  --build-arg "PATCHES_REF=${PATCHES_REF:-}" \
-  --build-arg "LLAMACPP_REF=${LLAMACPP_REF:-}" \
   "${extra[@]}" \
   "$root/docker/runtime"
