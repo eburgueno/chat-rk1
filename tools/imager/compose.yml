@@ -23,7 +23,7 @@
 # Update --system-extension-image to the digest printed by ./build.sh ext.
 services:
   imager:
-    image: ghcr.io/siderolabs/imager:v1.13.4
+    image: ghcr.io/siderolabs/imager:v1.14.0
     network_mode: host
     volumes:
       - ./out:/out
