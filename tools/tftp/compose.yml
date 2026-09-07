@@ -5,7 +5,7 @@
 #   docker compose -f tools/tftp/compose.yml up -d
 services:
   tftp:
-    image: docker.io/library/alpine:3.20
+    image: docker.io/library/alpine:3.24
     container_name: talos-tftp
     network_mode: host
     restart: unless-stopped
