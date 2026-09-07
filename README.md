@@ -122,6 +122,16 @@ registry is plain-HTTP on the LAN, apply `talos/registry-insecure.patch.yaml`
 to the nodes so containerd will pull from it. To publish your build to ghcr:
 `scripts/30-push-ghcr.sh`.
 
+**CI/CD:** [Renovate](renovate.json) (the [Mend GitHub
+App](https://github.com/apps/renovate) — free on public repos, install it on
+this repo and it picks up `renovate.json` with no extra config) opens a PR
+when the base image or the four pinned upstream commits
+(`scripts/config.env.example`) move — `.github/workflows/ci.yml`
+build-validates those PRs (no push). To cut an actual release, bump
+`RUNTIME_VERSION` and tag: `git tag vX.Y.Z && git push --tags` —
+`.github/workflows/publish-runtime.yml` then builds and pushes both tags to
+ghcr.io, same as `scripts/30-push-ghcr.sh`.
+
 ## Step 4 — deploy
 
 Manifests are numbered; details in [`k8s/README.md`](k8s/README.md). Two

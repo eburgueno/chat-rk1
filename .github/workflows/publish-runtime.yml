@@ -1,0 +1,104 @@
+name: Publish rocket-runtime
+
+# Publishes the rocket-runtime image to ghcr.io — the CI equivalent of
+# scripts/30-push-ghcr.sh. Two ways to fire it:
+#
+#   1. Push a tag matching v*.*.* (the normal release flow: bump
+#      RUNTIME_VERSION in scripts/config.env.example, then
+#      `git tag vX.Y.Z && git push --tags`). The tag name becomes the
+#      published version.
+#   2. workflow_dispatch, optionally overriding the version — handy for a
+#      one-off republish without cutting a tag.
+#
+# Build args (the four upstream commit pins) always come from
+# scripts/config.env.example, so bumping pins there (by hand or via a merged
+# Renovate PR) and then cutting a release tag is the only thing that changes
+# what gets built — same reproducibility story as the manual script.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      runtime_version:
+        description: "Version tag to publish (defaults to RUNTIME_VERSION in scripts/config.env.example)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve version + build args
+        id: cfg
+        run: |
+          set -a
+          source scripts/config.env.example
+          set +a
+
+          version="${{ github.event.inputs.runtime_version }}"
+          if [ -z "$version" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              version="${GITHUB_REF#refs/tags/}"
+            else
+              version="$RUNTIME_VERSION"
+            fi
+          fi
+
+          {
+            echo "version=$version"
+            echo "image=$GHCR_IMAGE"
+            echo "llamacpp_short=${LLAMACPP_REF:0:7}"
+            echo "rocket_userspace_ref=$ROCKET_USERSPACE_REF"
+            echo "ggml_rocket_ref=$GGML_ROCKET_REF"
+            echo "patches_ref=$PATCHES_REF"
+            echo "llamacpp_ref=$LLAMACPP_REF"
+          } >> "$GITHUB_OUTPUT"
+
+      # Same staging step as scripts/10-build-runtime.sh / 30-push-ghcr.sh.
+      - name: Stage bench harness
+        run: cp bench/bench.sh docker/runtime/bench.sh
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/runtime
+          platforms: linux/arm64
+          push: true
+          build-args: |
+            ROCKET_USERSPACE_REF=${{ steps.cfg.outputs.rocket_userspace_ref }}
+            GGML_ROCKET_REF=${{ steps.cfg.outputs.ggml_rocket_ref }}
+            PATCHES_REF=${{ steps.cfg.outputs.patches_ref }}
+            LLAMACPP_REF=${{ steps.cfg.outputs.llamacpp_ref }}
+          tags: |
+            ${{ steps.cfg.outputs.image }}:${{ steps.cfg.outputs.version }}
+            ${{ steps.cfg.outputs.image }}:llamacpp-${{ steps.cfg.outputs.llamacpp_short }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          {
+            echo "Pushed:"
+            echo "- \`${{ steps.cfg.outputs.image }}:${{ steps.cfg.outputs.version }}\`"
+            echo "- \`${{ steps.cfg.outputs.image }}:llamacpp-${{ steps.cfg.outputs.llamacpp_short }}\`"
+            echo ""
+            echo "First publish? Make the ghcr.io package **public**: your GitHub profile → Packages → chat-rk1/rocket-runtime → Package settings → Change visibility."
+          } >> "$GITHUB_STEP_SUMMARY"

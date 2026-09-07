@@ -1,0 +1,81 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "labels": ["renovate"],
+  "schedule": ["before 6am on monday"],
+
+  "ignorePaths": [
+    "kustomize/overlays/**"
+  ],
+
+  "packageRules": [
+    {
+      "description": "The four upstream NPU-stack commit pins (docker/runtime/Dockerfile + scripts/config.env.example) are validated together against one llama.cpp/ggml ABI — see docs/PROVENANCE.md. Bump them as one PR.",
+      "matchDatasources": ["git-refs"],
+      "groupName": "rocket NPU stack pins",
+      "commitMessageTopic": "{{depName}}"
+    },
+    {
+      "description": "Our own published runtime image — never automerge (it's the image the NPU-attached deployment pulls).",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/eburgueno/chat-rk1/rocket-runtime"],
+      "automerge": false,
+      "commitMessageTopic": "rocket-runtime image"
+    }
+  ],
+
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "gregordinary/rocket-userspace commit pin",
+      "fileMatch": ["^docker/runtime/Dockerfile$", "^scripts/config\\.env\\.example$"],
+      "matchStrings": [
+        "ARG ROCKET_USERSPACE_REF=(?<currentDigest>[0-9a-f]{40})",
+        "ROCKET_USERSPACE_REF=\"\\$\\{ROCKET_USERSPACE_REF:-(?<currentDigest>[0-9a-f]{40})\\}\""
+      ],
+      "depNameTemplate": "gregordinary/rocket-userspace",
+      "packageNameTemplate": "https://github.com/gregordinary/rocket-userspace",
+      "datasourceTemplate": "git-refs",
+      "currentValueTemplate": "main"
+    },
+    {
+      "customType": "regex",
+      "description": "gregordinary/ggml-rocket commit pin",
+      "fileMatch": ["^docker/runtime/Dockerfile$", "^scripts/config\\.env\\.example$"],
+      "matchStrings": [
+        "ARG GGML_ROCKET_REF=(?<currentDigest>[0-9a-f]{40})",
+        "GGML_ROCKET_REF=\"\\$\\{GGML_ROCKET_REF:-(?<currentDigest>[0-9a-f]{40})\\}\""
+      ],
+      "depNameTemplate": "gregordinary/ggml-rocket",
+      "packageNameTemplate": "https://github.com/gregordinary/ggml-rocket",
+      "datasourceTemplate": "git-refs",
+      "currentValueTemplate": "main"
+    },
+    {
+      "customType": "regex",
+      "description": "gregordinary/patches commit pin",
+      "fileMatch": ["^docker/runtime/Dockerfile$", "^scripts/config\\.env\\.example$"],
+      "matchStrings": [
+        "ARG PATCHES_REF=(?<currentDigest>[0-9a-f]{40})",
+        "PATCHES_REF=\"\\$\\{PATCHES_REF:-(?<currentDigest>[0-9a-f]{40})\\}\""
+      ],
+      "depNameTemplate": "gregordinary/patches",
+      "packageNameTemplate": "https://github.com/gregordinary/patches",
+      "datasourceTemplate": "git-refs",
+      "currentValueTemplate": "main"
+    },
+    {
+      "customType": "regex",
+      "description": "ggml-org/llama.cpp commit pin — bump alongside a ggml-rocket that re-checks the backend vtable (see docker/runtime/Dockerfile comment + ggml-rocket API.md).",
+      "fileMatch": ["^docker/runtime/Dockerfile$", "^scripts/config\\.env\\.example$"],
+      "matchStrings": [
+        "ARG LLAMACPP_REF=(?<currentDigest>[0-9a-f]{40})",
+        "LLAMACPP_REF=\"\\$\\{LLAMACPP_REF:-(?<currentDigest>[0-9a-f]{40})\\}\""
+      ],
+      "depNameTemplate": "ggml-org/llama.cpp",
+      "packageNameTemplate": "https://github.com/ggml-org/llama.cpp",
+      "datasourceTemplate": "git-refs",
+      "currentValueTemplate": "master"
+    }
+  ]
+}

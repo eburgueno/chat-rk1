@@ -2,6 +2,11 @@
 # Publish the rocket-runtime image to ghcr.io. Reads scripts/config.env
 # (GHCR_OWNER / GHCR_IMAGE / RUNTIME_VERSION / LLAMACPP_REF).
 #
+# CI equivalent: .github/workflows/publish-runtime.yml runs this same build
+# (reading scripts/config.env.example instead) whenever a vX.Y.Z tag is
+# pushed — use this script for a local/manual publish, the workflow for the
+# normal release flow.
+#
 # Prerequisite (interactive, do it yourself once):
 #   docker login ghcr.io -u <your-github-username>   # PAT with write:packages
 #
