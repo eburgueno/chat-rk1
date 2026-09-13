@@ -26,7 +26,7 @@ ARG GGML_ROCKET_REF=fb3f14e6b0873911af5d209f15f3b84393afbd54
 ARG PATCHES_REPO=https://github.com/gregordinary/patches
 ARG PATCHES_REF=314b1b34b561e0b7f92a9893798eda3f3a8abf16
 ARG LLAMACPP_REPO=https://github.com/ggml-org/llama.cpp
-ARG LLAMACPP_REF=465e49b9cea78a68b9c244ffb48d0ee24a82873d
+ARG LLAMACPP_REF=790cf51aabd61763486050dec7451d9147cb7c61
 
 # ==============================================================================
 # Stage 1: build
