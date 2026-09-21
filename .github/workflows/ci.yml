@@ -26,7 +26,7 @@ permissions:
 jobs:
   build-runtime:
     name: Build rocket-runtime (validate only, no push)
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
