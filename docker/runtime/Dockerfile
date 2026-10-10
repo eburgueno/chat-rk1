@@ -20,13 +20,13 @@ ARG BASE=debian:trixie-slim
 
 # ---- build args (pinned upstream sources) ------------------------------------
 ARG ROCKET_USERSPACE_REPO=https://github.com/gregordinary/rocket-userspace
-ARG ROCKET_USERSPACE_REF=1a181cd69fd98fafa998cfeca963d35cb5f43c46
+ARG ROCKET_USERSPACE_REF=f86cf52c666b4eddadc17d80d6c558b4067c0d6b
 ARG GGML_ROCKET_REPO=https://github.com/gregordinary/ggml-rocket
-ARG GGML_ROCKET_REF=fb3f14e6b0873911af5d209f15f3b84393afbd54
+ARG GGML_ROCKET_REF=550986d2212eb3a6f213a98c6a0dec0a8bf2f43b
 ARG PATCHES_REPO=https://github.com/gregordinary/patches
-ARG PATCHES_REF=314b1b34b561e0b7f92a9893798eda3f3a8abf16
+ARG PATCHES_REF=7b945e71fd55f888842767623ffb431212ae89c8
 ARG LLAMACPP_REPO=https://github.com/ggml-org/llama.cpp
-ARG LLAMACPP_REF=465e49b9cea78a68b9c244ffb48d0ee24a82873d
+ARG LLAMACPP_REF=aa94f2086147cd4bfbcff818ce998dffce5fcb39
 
 # ==============================================================================
 # Stage 1: build
